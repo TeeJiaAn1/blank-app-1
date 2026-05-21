@@ -611,3 +611,4 @@ if uploaded_file:
         )
 else:
     st.info("Please upload your DartFish CSV.")
+matplotlib
