@@ -7,9 +7,15 @@ from fpdf import FPDF
 from datetime import datetime
 import tempfile
 import os
+import re
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="HPSI- Badminton PDF Report", layout="wide")
+
+# --- GLOBAL COLOR CONSTANTS (define BEFORE any charts use them) ---
+col_work = "#F5EDC8"
+col_player = "#FFA600"
+col_opponent = "#2C3E50"
 
 # --- PDF CLASS DEFINITION ---
 class BadmintonReport(FPDF):
@@ -31,7 +37,6 @@ class BadmintonReport(FPDF):
             # --- AUTO-FIT LINE 1 ---
             font_size_1 = 15
             self.set_font("Arial", 'B', font_size_1)
-            # Shrink font size by 0.5 until the string width fits inside max_width
             while self.get_string_width(self.title_line1) > max_width and font_size_1 > 6:
                 font_size_1 -= 0.5
                 self.set_font("Arial", 'B', font_size_1)
@@ -79,19 +84,15 @@ class BadmintonReport(FPDF):
                 current_font_size = base_font_size
                 self.set_font("Arial", size=current_font_size)
                 
-                # If text is wider than the cell (minus 2mm for padding), shrink it
                 while self.get_string_width(text) > (cell_width - 2) and current_font_size > 5:
                     current_font_size -= 0.5
                     self.set_font("Arial", size=current_font_size)
                 
-                # Print the cell with the adjusted font size
                 self.cell(cell_width, 7, text, border=1, align='C')
-                
-                # Reset back to base font size for the next cell
                 self.set_font("Arial", size=base_font_size)
             self.ln()
         self.ln(5)
-        
+
 # --- ANALYTICS ENGINE ---
 def analyze_match(df, p_name, o_name):
     df['Name'] = df['Name'].str.replace(r" \(\d+\)", "", regex=True)
@@ -128,7 +129,6 @@ def analyze_match(df, p_name, o_name):
             after_end = df.iloc[end_row_idx+1:]
             next_serve_search = after_end[after_end['Name'].str.contains("Serve", na=False)]
             
-            # WINNER INFERENCE LOGIC
             if not next_serve_search.empty:
                 next_serve_name = next_serve_search.iloc[0]['Name']
                 next_server_side = "Player" if "Player" in next_serve_name else "Opponent"
@@ -138,8 +138,6 @@ def analyze_match(df, p_name, o_name):
                 else:
                     winner = "Opponent" if server_side == "Player" else "Player"
             else:
-                # If it's the absolute final rally of the match (no next serve), 
-                # the winner is the player who is currently leading / on match point.
                 if current_p_score > current_o_score:
                     winner = "Player"
                 elif current_o_score > current_p_score:
@@ -150,7 +148,6 @@ def analyze_match(df, p_name, o_name):
             score_diff = abs(current_p_score - current_o_score)
             is_pressure = (score_diff <= 1) or (current_p_score >= 20) or (current_o_score >= 20)
 
-            # --- pull error metadata from End Rally row ---
             error_type = end_row.get('Error Type', None)
             landing_pos = end_row.get('Landing Position', None)
             landing_zone = end_row.get('Landing Zone', None)
@@ -207,23 +204,18 @@ with st.sidebar:
 
 uploaded_file = st.file_uploader("Upload DartFish CSV", type="csv")
 
+rdf = None
+
 if uploaded_file:
     raw_df = pd.read_csv(uploaded_file)
     rdf = analyze_match(raw_df, p_name, o_name)
+    st.success("CSV uploaded and rally data processed.")
 else:
-    rdf = None
     st.info("Please upload your DartFish CSV.")
 
 def compute_error_stats(rdf):
-    """
-    Returns a dict of DataFrames / series useful for error reporting.
-    Assumes rdf has Error_Type, Shot_Type, Landing_Zone, Player_Zone, etc.
-    """
-    # Only rallies where the point ended with an error (forced or unforced)
     err_df = rdf[rdf['Error_Type'].notna()].copy()
 
-    # 1) Basic counts by side and error type
-    #    Convention: if Winner == 'Player', then Opponent made the error, and vice versa.
     def side_committed_error(row):
         if row['Winner'] == 'Player':
             return 'Opponent'
@@ -234,53 +226,21 @@ def compute_error_stats(rdf):
 
     err_df['Error_Side'] = err_df.apply(side_committed_error, axis=1)
 
-    # Total unforced / forced by side
-    err_counts = (
-        err_df
-        .groupby(['Error_Side', 'Error_Type'])
-        .size()
-        .reset_index(name='Count')
-    )
+    err_counts = err_df.groupby(['Error_Side', 'Error_Type']).size().reset_index(name='Count')
 
-    # 2) By shot type (per side)
-    shot_type_counts = (
-        err_df
-        .groupby(['Error_Side', 'Error_Type', 'Shot_Type'])
-        .size()
-        .reset_index(name='Count')
-    )
+    shot_type_counts = err_df.groupby(['Error_Side', 'Error_Type', 'Shot_Type']).size().reset_index(name='Count')
 
-    # 3) By player zone / landing zone (per side)
-    zone_counts = (
-        err_df
-        .groupby(['Error_Side', 'Error_Type', 'Player_Zone'])
-        .size()
-        .reset_index(name='Count')
-    )
+    zone_counts = err_df.groupby(['Error_Side', 'Error_Type', 'Player_Zone']).size().reset_index(name='Count')
 
-    landing_zone_counts = (
-        err_df
-        .groupby(['Error_Side', 'Error_Type', 'Landing_Zone'])
-        .size()
-        .reset_index(name='Count')
-    )
+    landing_zone_counts = err_df.groupby(['Error_Side', 'Error_Type', 'Landing_Zone']).size().reset_index(name='Count')
 
-    # 4) Critical moments:
-    #    Define critical as score diff <= 1 or either >= 18 (you can tweak).
     err_df['Score_Diff'] = (err_df['P_Score_Before'] - err_df['O_Score_Before']).abs()
     err_df['Is_Critical'] = (err_df['Score_Diff'] <= 1) | \
                             (err_df['P_Score_Before'] >= 18) | \
                             (err_df['O_Score_Before'] >= 18)
 
-    crit_counts = (
-        err_df[err_df['Is_Critical']]
-        .groupby(['Error_Side', 'Error_Type'])
-        .size()
-        .reset_index(name='Count')
-    )
+    crit_counts = err_df[err_df['Is_Critical']].groupby(['Error_Side', 'Error_Type']).size().reset_index(name='Count')
 
-    # 5) Consecutive unforced errors by side
-    #    We walk rally by rally within each set and side.
     streak_rows = []
     for side in ['Player', 'Opponent']:
         side_df = err_df.sort_values(['Set', 'Rally_Num']).copy()
@@ -309,12 +269,7 @@ def compute_error_stats(rdf):
     streak_df = pd.DataFrame(streak_rows)
     max_streaks = None
     if not streak_df.empty:
-        max_streaks = (
-            streak_df
-            .groupby('Side')['Streak_Length']
-            .max()
-            .reset_index()
-        )
+        max_streaks = streak_df.groupby('Side')['Streak_Length'].max().reset_index()
 
     return {
         'err_counts': err_counts,
@@ -325,25 +280,22 @@ def compute_error_stats(rdf):
         'streak_df': streak_df,
         'max_streaks': max_streaks
     }
-    
+
+# --- BUTTON FILTERED TO ONLY RUN WHEN RDF EXISTS ---
+if rdf is not None and not rdf.empty:
     if st.button("Generate Full PDF Report"):
-        # Split the text into two variables
         date_formatted = date_str.strftime("%d %b %Y")
         line1 = f"{date_formatted} | {event} | {round_m}"
         line2 = f"{p_name} vs {o_name}"
         
-        # Pass both lines into the PDF generator
         pdf = BadmintonReport(title_line1=line1, title_line2=line2)
         pdf.set_auto_page_break(auto=True, margin=15)
         pdf.add_page()
 
         # --- 1. EVENT SUMMARY ---
         pdf.section_title("Event Summary")
-        if not rdf.empty:
-            total_duration_seconds = (rdf['End_Pos'].max() - rdf['Start_Pos'].min()) / 1000
-            duration_str = f"{int(total_duration_seconds // 60)} min {int(total_duration_seconds % 60)} sec"
-        else:
-            duration_str = "0 min 0 sec"
+        total_duration_seconds = (rdf['End_Pos'].max() - rdf['Start_Pos'].min()) / 1000
+        duration_str = f"{int(total_duration_seconds // 60)} min {int(total_duration_seconds % 60)} sec"
 
         set_stats = rdf.groupby('Set').agg({'P_Score_Before': 'max', 'O_Score_Before': 'max', 'Winner': 'last'})
         final_scores = []
@@ -425,7 +377,6 @@ def compute_error_stats(rdf):
             p_pct = (p_wins / total) * 100
             o_pct = (o_wins / total) * 100
             
-            # REPLACED '•' with '-' to fix the FPDF Unicode Encoding Error
             return (f"{side_name} Serves: {total}\n"
                     f"- {p_pct:.0f}% ({p_wins}) won by {p_name}\n"
                     f"- {o_pct:.0f}% ({o_wins}) won by {o_name}")
@@ -438,24 +389,18 @@ def compute_error_stats(rdf):
         pdf.multi_cell(190, 6, get_serve_summary_text("Opponent", o_name))
         pdf.ln(5)
 
-        # Serve Outcome Breakdown Plot
         fig_serve, ax_serve = plt.subplots(figsize=(8, 5))
         
-        # Group data to get counts and percentages
         serve_counts = rdf.groupby(['Server', 'Winner']).size().reset_index(name='counts')
         serve_totals = rdf.groupby('Server').size().reset_index(name='totals')
         serve_plot_data = serve_counts.merge(serve_totals, on='Server')
         serve_plot_data['pct'] = (serve_plot_data['counts'] / serve_plot_data['totals']) * 100
 
-        # MAPPING UPDATE: Map both Server AND Winner to the actual player names
         serve_plot_data['Server'] = serve_plot_data['Server'].map({'Player': p_name, 'Opponent': o_name})
         serve_plot_data['Winner'] = serve_plot_data['Winner'].map({'Player': p_name, 'Opponent': o_name})
         serve_totals['Server'] = serve_totals['Server'].map({'Player': p_name, 'Opponent': o_name})
         
-        # Explicitly define the order to render the bars
         server_order = [p_name, o_name]
-        
-        # STRICT COLOR MAPPING: Lock specific names to specific hex codes
         color_map = {p_name: '#FFA600', o_name: '#2C3E50'}
 
         sns.barplot(
@@ -463,27 +408,20 @@ def compute_error_stats(rdf):
             x='Server', 
             y='pct', 
             hue='Winner', 
-            hue_order=[o_name, p_name], # Sets the order they appear in the legend
+            hue_order=[o_name, p_name],
             order=server_order,
             ax=ax_serve, 
-            palette=color_map # Applies the strict color map dictionary
+            palette=color_map
         )
         
-        # Add Data Labels: 70% (20)
         for p in ax_serve.patches:
             height = p.get_height()
             if height > 0:
-                # Use the x-coordinate of the bar to find which Server index it belongs to
                 idx = int(round(p.get_x() + p.get_width() / 2.0))
-                
-                # Safety check to prevent index errors
                 if 0 <= idx < len(server_order):
                     server_name = server_order[idx]
-                    
-                    # Retrieve the absolute total for this specific server
                     total = serve_totals[serve_totals['Server'] == server_name]['totals'].values[0]
                     count = int(round((height / 100) * total))
-                    
                     ax_serve.text(p.get_x() + p.get_width()/2., height / 2,
                                 f'{height:.0f}% ({count})', 
                                 ha='center', va='center', color='white', fontweight='bold', fontsize=9)
@@ -492,8 +430,6 @@ def compute_error_stats(rdf):
         ax_serve.set_xlabel("")  
         ax_serve.set_ylabel("Percentage of Points Won (%)")
         ax_serve.set_ylim(0, 110)
-        
-        # Removed the manual 'labels' override so Seaborn reads the names naturally from the DataFrame
         ax_serve.legend(title="Won By:", loc='upper right')
         
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
@@ -511,7 +447,6 @@ def compute_error_stats(rdf):
         pdf.cell(190, 10, "Rally Categories: Short (<7s), Mid (7-15s), Long (>15s)", ln=True)
         pdf.ln(5)
 
-        # Plot 1: Rally Length Distribution
         fig_dist, ax_dist = plt.subplots(figsize=(8, 4))
         rdf['Cat'] = pd.Categorical(rdf['Cat'], categories=['Short', 'Mid', 'Long'], ordered=True)
         cat_counts = rdf['Cat'].value_counts(sort=False)
@@ -535,25 +470,20 @@ def compute_error_stats(rdf):
         plt.close()
         pdf.ln(10)
 
-        # Plot 2: Win % by Rally Category
         fig_win_cat, ax_win_cat = plt.subplots(figsize=(8, 5))
         
-        # Group to get percentages and absolute counts
         win_cat_counts = rdf.groupby(['Cat', 'Winner']).size().unstack(fill_value=0)
         
-        # Safety check: Ensure both columns exist even if a player scored 0 in a category
         for col in ['Opponent', 'Player']:
             if col not in win_cat_counts.columns:
                 win_cat_counts[col] = 0
                 
-        # STRICT COLOR MAPPING: Force Opponent first (Navy: #2C3E50), Player second (Gold: #FFA600)
         win_cat_counts = win_cat_counts[['Opponent', 'Player']]
         
         win_cat_totals = win_cat_counts.sum(axis=1)
         win_cat_props = win_cat_counts.div(win_cat_totals, axis=0).mul(100)
         win_cat_props = win_cat_props.reindex(['Short', 'Mid', 'Long'])
         
-        # Rename the columns to actual player names for the legend
         win_cat_props.columns = [o_name, p_name]
         win_cat_counts.columns = [o_name, p_name]
         
@@ -564,7 +494,6 @@ def compute_error_stats(rdf):
             color=['#2C3E50', '#FFA600'] 
         )
         
-        # Add Data Labels to Stacked Bars: 70% (20)
         for i, (idx, row) in enumerate(win_cat_props.iterrows()):
             cumulative_height = 0
             for winner in win_cat_props.columns:
@@ -578,10 +507,7 @@ def compute_error_stats(rdf):
 
         ax_win_cat.set_title("Win % by Rally Category", fontweight='bold')
         ax_win_cat.set_ylabel("Win Percentage (%)")
-        
-        # THE FIX: Explicitly set the x-axis label to overwrite "Cat"
         ax_win_cat.set_xlabel("Rally Category") 
-        
         ax_win_cat.legend(title="Won By:", loc='upper right')
         plt.xticks(rotation=0)
 
@@ -591,7 +517,7 @@ def compute_error_stats(rdf):
             os.remove(tmp.name)
         plt.close()
 
-                # --- 4.2 ERROR STATISTICS SUMMARY ---
+        # --- 4.2 ERROR STATISTICS SUMMARY ---
         pdf.add_page()
         pdf.section_title("Error Statistics Summary")
 
@@ -603,7 +529,6 @@ def compute_error_stats(rdf):
         crit_counts = error_stats['crit_counts']
         max_streaks = error_stats['max_streaks']
 
-        # 4.2.1 Total Forced / Unforced Errors by Side
         pdf.set_font("Arial", 'B', 11)
         pdf.cell(0, 8, "Total Forced vs Unforced Errors (by side committing error)", ln=True)
         table_data = []
@@ -615,7 +540,6 @@ def compute_error_stats(rdf):
                 table_data.append([side, etype, count])
         pdf.quick_table(["Side", "Error Type", "Count"], table_data, [40, 50, 30])
 
-        # 4.2.2 Unforced Errors in Critical Moments
         pdf.set_font("Arial", 'B', 11)
         pdf.cell(0, 8, "Unforced Errors in Critical Moments (score diff ≤1 or ≥18 points)", ln=True)
         crit_table = []
@@ -626,7 +550,6 @@ def compute_error_stats(rdf):
             crit_table.append([side, "Unforced Error", count])
         pdf.quick_table(["Side", "Error Type", "Count in Critical Moments"], crit_table, [40, 60, 50])
 
-        # 4.2.3 Error Breakdown by Shot Type (Unforced only)
         pdf.set_font("Arial", 'B', 11)
         pdf.cell(0, 8, "Unforced Errors by Shot Type", ln=True)
         shot_table = []
@@ -642,7 +565,6 @@ def compute_error_stats(rdf):
         if shot_table:
             pdf.quick_table(["Side", "Shot Type", "Count"], shot_table, [40, 60, 40])
 
-        # 4.2.4 Error Breakdown by Court Zone (Player Zone)
         pdf.set_font("Arial", 'B', 11)
         pdf.cell(0, 8, "Unforced Errors by Player Court Zone", ln=True)
         zone_table = []
@@ -658,7 +580,6 @@ def compute_error_stats(rdf):
         if zone_table:
             pdf.quick_table(["Side", "Player Zone", "Count"], zone_table, [40, 60, 40])
 
-        # 4.2.5 Max consecutive unforced errors
         pdf.set_font("Arial", 'B', 11)
         pdf.cell(0, 8, "Longest Streaks of Consecutive Unforced Errors", ln=True)
         streak_table = []
@@ -668,12 +589,11 @@ def compute_error_stats(rdf):
         if streak_table:
             pdf.quick_table(["Side", "Max Consecutive Unforced Errors"], streak_table, [70, 60])
 
-        # Optional: you could add one small bar chart: unforced errors by side
         fig_err, ax_err = plt.subplots(figsize=(4, 3))
         unforced_by_side = err_counts[err_counts['Error_Type'] == 'Unforced Error']
         if not unforced_by_side.empty:
             ax_err.bar(unforced_by_side['Error_Side'], unforced_by_side['Count'],
-                       color=[col_player, col_opponent])
+                       color=[col_opponent, col_player])
             ax_err.set_title("Total Unforced Errors by Side")
             ax_err.set_ylabel("Count")
             for i, v in enumerate(unforced_by_side['Count']):
@@ -683,47 +603,34 @@ def compute_error_stats(rdf):
                 pdf.image(tmp.name, x=40, w=120)
                 os.remove(tmp.name)
         plt.close()
-        
+
         # --- 5. POINT PROGRESSION & LOAD PER SET ---
-        # We start the section title on its own page
         pdf.add_page()
         pdf.section_title("Point Progression & Load per Set")
-        
-        col_work, col_player, col_opponent = "#F5EDC8", "#FFA600", "#2C3E50"
 
-        # Helper function to format seconds into MM:SS for the X-axis
         def format_mmss(seconds):
             m, s = divmod(int(max(0, seconds)), 60)
             return f"{m:02d}:{s:02d}"
 
-        # Iterate through each unique set found in the processed data
         for s_name in rdf['Set'].unique():
-            # Force a NEW PAGE for every set (Set 1, Set 2, Set 3 each get their own page)
-            # We check if it's the very first set to avoid a blank page after the section title
             if s_name != rdf['Set'].unique()[0]:
                 pdf.add_page()
 
-            # Clean the set title (e.g., "1. Set" becomes "Set 1")
             clean_set_title = f"Set {int(''.join(filter(str.isdigit, str(s_name))))}"
             s_df = rdf[rdf['Set'] == s_name].copy().sort_values('Start_Pos')
             
-            # --- A. LOAD STATISTICS TABLE ---
-            # Filter criteria: exclude 0 rest and technical intervals > 45s
             stats_data = s_df[(s_df['Rest'] > 0.1) & (s_df['Rest'] < 45)].copy()
             
             if not stats_data.empty:
                 load_rows = [
                     ["Work Duration (s)", f"{stats_data['Duration'].max():.1f}", f"{stats_data['Duration'].min():.1f}", f"{stats_data['Duration'].mean():.1f}"],
                     ["Rest Duration (s)", f"{stats_data['Rest'].max():.1f}", f"{stats_data['Rest'].min():.1f}", f"{stats_data['Rest'].mean():.1f}"],
-                    # Logic: Max intensity is the Minimum ratio value (least rest per work)
                     ["Work:Rest Ratio (1:X)", f"1 : {stats_data['Ratio'].min():.1f}", f"1 : {stats_data['Ratio'].max():.1f}", f"1 : {stats_data['Ratio'].mean():.1f}"]
                 ]
                 pdf.set_font("Arial", 'B', 11)
                 pdf.cell(0, 10, f"Load Statistics (Rest Intervals Excluded) - {clean_set_title}", ln=True)
                 pdf.quick_table(["Metric", "Max", "Min", "Mean"], load_rows, [50, 35, 35, 30])
             
-            # --- B. POINT PROGRESSION PLOT ---
-            # Normalize timestamps so each set starts at 0:00
             set_start_ms = s_df['Start_Pos'].min()
             s_df['Start_Rel'] = (s_df['Start_Pos'] - set_start_ms) / 1000
             s_df['End_Rel'] = (s_df['End_Pos'] - set_start_ms) / 1000
@@ -732,46 +639,40 @@ def compute_error_stats(rdf):
             
             fig, ax = plt.subplots(figsize=(10, 5))
             
-            # Shading for Work periods
             for _, rally in s_df.iterrows():
                 ax.axvspan(rally['Start_Rel'], rally['End_Rel'], color=col_work, alpha=0.5)
 
-            # Step plot for score progression
             x_steps = [0] + list(s_df['End_Rel'])
             p_steps = [0] + list(s_df['P_Cum'])
             o_steps = [0] + list(s_df['O_Cum'])
             ax.step(x_steps, p_steps, where='post', color=col_player, linewidth=2, label=p_name)
             ax.step(x_steps, o_steps, where='post', color=col_opponent, linewidth=2, label=o_name)
-            
-                    # Numerical Score Labels with Unforced Error Highlighting
-        for _, row in s_df.iterrows():
-            x_pos = row['End_Rel']
-
-            # New score after this rally
-            if row['Winner'] == 'Player':
-                score_val = int(row['P_Score_Before'] + 1)
-            else:
-                score_val = int(row['O_Score_Before'] + 1)
-
-            # Default colour: gold for player point, navy for opponent point
-            base_color = col_player if row['Winner'] == 'Player' else col_opponent
-            marker_color = base_color
-
-            # If the rally ended with an Unforced Error, colour the marker red
-            if isinstance(row.get('Error_Type', None), str) and row['Error_Type'] == 'Unforced Error':
-                marker_color = 'red'
-
-            ax.text(
-                x_pos,
-                score_val + 0.6,
-                str(score_val),
-                color=marker_color,
-                fontsize=7,
-                fontweight='bold',
-                ha='center'
-            )
 
             import matplotlib.ticker as ticker
+            for _, row in s_df.iterrows():
+                x_pos = row['End_Rel']
+
+                if row['Winner'] == 'Player':
+                    score_val = int(row['P_Score_Before'] + 1)
+                else:
+                    score_val = int(row['O_Score_Before'] + 1)
+
+                base_color = col_player if row['Winner'] == 'Player' else col_opponent
+                marker_color = base_color
+
+                if isinstance(row.get('Error_Type', None), str) and row['Error_Type'] == 'Unforced Error':
+                    marker_color = 'red'
+
+                ax.text(
+                    x_pos,
+                    score_val + 0.6,
+                    str(score_val),
+                    color=marker_color,
+                    fontsize=7,
+                    fontweight='bold',
+                    ha='center'
+                )
+
             ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f"{int(x//60):02d}:{int(x%60):02d}"))
             ax.set_title(f"Point Progression Timeline - {clean_set_title}", fontsize=12, fontweight='bold')
             ax.set_xlabel("Time in Set (mm:ss)")
@@ -826,11 +727,8 @@ def compute_error_stats(rdf):
         pdf.multi_cell(0, 8, methodology_text)
 
         # --- FINALIZE & DYNAMIC NAMING ---
-        # 1. Format Date as YYYYMMDD
         date_formatted = date_str.strftime("%Y%m%d")
         
-        # 2. Calculate Match Score (Sets Won)
-        # We look at the final scores of each set to see who won more sets
         p_sets_won = 0
         o_sets_won = 0
         for s in final_scores:
@@ -843,14 +741,11 @@ def compute_error_stats(rdf):
         
         match_score_str = f"{p_sets_won}-{o_sets_won}"
         
-        # 3. Construct Filename
-        # Convention: YYYYMMDD Competition Round Player MatchScore Opponent
-        clean_event = event.replace(" ", "_") # Optional: replace spaces for URL safety
+        clean_event = event.replace(" ", "_")
         filename = f"{date_formatted} {event} {round_m} {p_name} {match_score_str} {o_name}.pdf"
         
-        # 4. Prepare Download
-        pdf_output = pdf.output(dest='S')
-        pdf_bytes = bytes(pdf_output)
+        # Fixed PDF encoding for Python 3
+        pdf_bytes = pdf.output(dest='S').encode('latin-1')
         
         st.download_button(
             label="📥 Download Full PDF Match Report", 
