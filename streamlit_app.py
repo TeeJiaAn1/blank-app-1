@@ -16,6 +16,7 @@ st.set_page_config(page_title="HPSI- Badminton PDF Report", layout="wide")
 col_work = "#F5EDC8"
 col_player = "#FFA600"
 col_opponent = "#2C3E50"
+col_forced = "#2E8B57"
 
 
 # --- PDF TEXT SANITIZER FOR PYFPDF / LATIN-1 ---
@@ -310,7 +311,6 @@ if uploaded_file:
         st.error(f"Failed to read/process CSV: {e}")
 else:
     st.info("Please upload your DartFish CSV.")
-
 
 if rdf is not None and not rdf.empty:
     if st.button("Generate Full PDF Report"):
@@ -663,7 +663,7 @@ if rdf is not None and not rdf.empty:
                     os.remove(tmp.name)
             plt.close()
 
-                        # --- 5. POINT PROGRESSION & LOAD PER SET ---
+            # --- 5. POINT PROGRESSION & LOAD PER SET ---
             pdf.add_page()
             pdf.section_title("Point Progression & Load per Set")
 
@@ -707,11 +707,9 @@ if rdf is not None and not rdf.empty:
                 ax.step(x_steps, p_steps, where='post', color=col_player, linewidth=2, label=p_name)
                 ax.step(x_steps, o_steps, where='post', color=col_opponent, linewidth=2, label=o_name)
 
-                # Point label logic:
-                # default winner point = player gold / opponent navy
-                # forced error = winner gained point shown in green
-                # unforced error = losing side score shown in red
-
+                # Always show the actual gained point.
+                # Forced error -> winner point label green.
+                # Unforced error -> winner point label remains visible, plus a red "x" on loser side.
                 for _, row in s_df.iterrows():
                     x_pos = row['End_Rel']
                     winner = row['Winner']
@@ -720,31 +718,37 @@ if rdf is not None and not rdf.empty:
                     if winner == 'Player':
                         winner_score_val = int(row['P_Score_Before'] + 1)
                         loser_score_val = int(row['O_Score_Before'])
-                        default_winner_color = col_player
+                        winner_color_default = col_player
                     else:
                         winner_score_val = int(row['O_Score_Before'] + 1)
                         loser_score_val = int(row['P_Score_Before'])
-                        default_winner_color = col_opponent
+                        winner_color_default = col_opponent
 
                     if error_type == 'Forced Error':
-                        label_value = winner_score_val
-                        label_color = 'green'
-                    elif error_type == 'Unforced Error':
-                        label_value = loser_score_val
-                        label_color = 'red'
+                        winner_label_color = col_forced
                     else:
-                        label_value = winner_score_val
-                        label_color = default_winner_color
+                        winner_label_color = winner_color_default
 
                     ax.text(
                         x_pos,
-                        label_value + 0.6,
-                        str(label_value),
-                        color=label_color,
+                        winner_score_val + 0.6,
+                        str(winner_score_val),
+                        color=winner_label_color,
                         fontsize=7,
                         fontweight='bold',
                         ha='center'
                     )
+
+                    if error_type == 'Unforced Error':
+                        ax.text(
+                            x_pos,
+                            loser_score_val + 0.2,
+                            "x",
+                            color='red',
+                            fontsize=9,
+                            fontweight='bold',
+                            ha='center'
+                        )
 
                 ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f"{int(x//60):02d}:{int(x%60):02d}"))
                 ax.set_title(f"Point Progression Timeline - {clean_set_title}", fontsize=12, fontweight='bold')
@@ -759,7 +763,7 @@ if rdf is not None and not rdf.empty:
                     os.remove(tmp.name)
                 plt.close()
                 pdf.ln(10)
-    
+
             # --- 6. TOP 10 TOUGHEST RALLIES ---
             pdf.add_page()
             pdf.section_title("Top 10 Toughest Rallies (by Work:Rest Ratio)")
