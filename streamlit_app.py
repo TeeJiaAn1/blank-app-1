@@ -183,8 +183,8 @@ rallies.append({
     "Shot_Type": shot_type
 })
             
-        if winner == "Player": current_p_score += 1
-            else: current_o_score += 1
+    if winner == "Player": current_p_score += 1
+        else: current_o_score += 1
     
     rdf = pd.DataFrame(rallies)
     rdf['Rest'] = (rdf.groupby('Set')['Start_Pos'].shift(-1) - rdf['End_Pos']) / 1000
