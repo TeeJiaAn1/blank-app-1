@@ -664,84 +664,106 @@ if rdf is not None and not rdf.empty:
             plt.close()
 
             # --- 5. POINT PROGRESSION & LOAD PER SET ---
-            pdf.add_page()
-            pdf.section_title("Point Progression & Load per Set")
+pdf.add_page()
+pdf.section_title("Point Progression & Load per Set")
 
-            set_list = list(rdf['Set'].unique())
+set_list = list(rdf['Set'].unique())
 
-            for idx_set, s_name in enumerate(set_list):
-                if idx_set != 0:
-                    pdf.add_page()
+for idx_set, s_name in enumerate(set_list):
+    if idx_set != 0:
+        pdf.add_page()
 
-                digits = ''.join(filter(str.isdigit, str(s_name)))
-                clean_set_title = f"Set {digits}" if digits else safe_pdf_text(str(s_name))
-                s_df = rdf[rdf['Set'] == s_name].copy().sort_values('Start_Pos')
+    digits = ''.join(filter(str.isdigit, str(s_name)))
+    clean_set_title = f"Set {digits}" if digits else safe_pdf_text(str(s_name))
+    s_df = rdf[rdf['Set'] == s_name].copy().sort_values('Start_Pos')
 
-                stats_data = s_df[(s_df['Rest'] > 0.1) & (s_df['Rest'] < 45)].copy()
+    stats_data = s_df[(s_df['Rest'] > 0.1) & (s_df['Rest'] < 45)].copy()
 
-                if not stats_data.empty:
-                    load_rows = [
-                        ["Work Duration (s)", f"{stats_data['Duration'].max():.1f}", f"{stats_data['Duration'].min():.1f}", f"{stats_data['Duration'].mean():.1f}"],
-                        ["Rest Duration (s)", f"{stats_data['Rest'].max():.1f}", f"{stats_data['Rest'].min():.1f}", f"{stats_data['Rest'].mean():.1f}"],
-                        ["Work:Rest Ratio (1:X)", f"1 : {stats_data['Ratio'].min():.1f}", f"1 : {stats_data['Ratio'].max():.1f}", f"1 : {stats_data['Ratio'].mean():.1f}"]
-                    ]
-                    pdf.set_font("Arial", 'B', 11)
-                    pdf.cell(0, 10, safe_pdf_text(f"Load Statistics (Rest Intervals Excluded) - {clean_set_title}"), ln=True)
-                    pdf.quick_table(["Metric", "Max", "Min", "Mean"], load_rows, [50, 35, 35, 30])
+    if not stats_data.empty:
+        load_rows = [
+            ["Work Duration (s)", f"{stats_data['Duration'].max():.1f}", f"{stats_data['Duration'].min():.1f}", f"{stats_data['Duration'].mean():.1f}"],
+            ["Rest Duration (s)", f"{stats_data['Rest'].max():.1f}", f"{stats_data['Rest'].min():.1f}", f"{stats_data['Rest'].mean():.1f}"],
+            ["Work:Rest Ratio (1:X)", f"1 : {stats_data['Ratio'].min():.1f}", f"1 : {stats_data['Ratio'].max():.1f}", f"1 : {stats_data['Ratio'].mean():.1f}"]
+        ]
+        pdf.set_font("Arial", 'B', 11)
+        pdf.cell(0, 10, safe_pdf_text(f"Load Statistics (Rest Intervals Excluded) - {clean_set_title}"), ln=True)
+        pdf.quick_table(["Metric", "Max", "Min", "Mean"], load_rows, [50, 35, 35, 30])
 
-                set_start_ms = s_df['Start_Pos'].min()
-                s_df['Start_Rel'] = (s_df['Start_Pos'] - set_start_ms) / 1000
-                s_df['End_Rel'] = (s_df['End_Pos'] - set_start_ms) / 1000
-                s_df['P_Cum'] = (s_df['Winner'] == 'Player').cumsum()
-                s_df['O_Cum'] = (s_df['Winner'] == 'Opponent').cumsum()
+    set_start_ms = s_df['Start_Pos'].min()
+    s_df['Start_Rel'] = (s_df['Start_Pos'] - set_start_ms) / 1000
+    s_df['End_Rel'] = (s_df['End_Pos'] - set_start_ms) / 1000
+    s_df['P_Cum'] = (s_df['Winner'] == 'Player').cumsum()
+    s_df['O_Cum'] = (s_df['Winner'] == 'Opponent').cumsum()
 
-                fig, ax = plt.subplots(figsize=(10, 5))
+    fig, ax = plt.subplots(figsize=(10, 5))
 
-                for _, rally in s_df.iterrows():
-                    ax.axvspan(rally['Start_Rel'], rally['End_Rel'], color=col_work, alpha=0.5)
+    for _, rally in s_df.iterrows():
+        ax.axvspan(rally['Start_Rel'], rally['End_Rel'], color=col_work, alpha=0.5)
 
-                x_steps = [0] + list(s_df['End_Rel'])
-                p_steps = [0] + list(s_df['P_Cum'])
-                o_steps = [0] + list(s_df['O_Cum'])
+    x_steps = [0] + list(s_df['End_Rel'])
+    p_steps = [0] + list(s_df['P_Cum'])
+    o_steps = [0] + list(s_df['O_Cum'])
 
-                ax.step(x_steps, p_steps, where='post', color=col_player, linewidth=2, label=p_name)
-                ax.step(x_steps, o_steps, where='post', color=col_opponent, linewidth=2, label=o_name)
+    ax.step(x_steps, p_steps, where='post', color=col_player, linewidth=2, label=p_name)
+    ax.step(x_steps, o_steps, where='post', color=col_opponent, linewidth=2, label=o_name)
 
-                for _, row in s_df.iterrows():
-                    x_pos = row['End_Rel']
+    # --- NEW POINT LABEL LOGIC ---
+    # Default winner point:
+    # - Player wins -> gold
+    # - Opponent wins -> navy
+    # Forced error -> winner's gained point shown in green
+    # Unforced error -> losing side's score shown in red
 
-                    if row['Winner'] == 'Player':
-                        score_val = int(row['P_Score_Before'] + 1)
-                    else:
-                        score_val = int(row['O_Score_Before'] + 1)
+    for _, row in s_df.iterrows():
+        x_pos = row['End_Rel']
+        winner = row['Winner']
+        error_type = row.get('Error_Type', None)
 
-                    base_color = col_player if row['Winner'] == 'Player' else col_opponent
-                    marker_color = 'red' if row.get('Error_Type') == 'Unforced Error' else base_color
+        if winner == 'Player':
+            loser = 'Opponent'
+            winner_score_val = int(row['P_Score_Before'] + 1)
+            loser_score_val = int(row['O_Score_Before'])
+            default_winner_color = col_player
+        else:
+            loser = 'Player'
+            winner_score_val = int(row['O_Score_Before'] + 1)
+            loser_score_val = int(row['P_Score_Before'])
+            default_winner_color = col_opponent
 
-                    ax.text(
-                        x_pos,
-                        score_val + 0.6,
-                        str(score_val),
-                        color=marker_color,
-                        fontsize=7,
-                        fontweight='bold',
-                        ha='center'
-                    )
+        if error_type == 'Forced Error':
+            label_value = winner_score_val
+            label_color = 'green'
+        elif error_type == 'Unforced Error':
+            label_value = loser_score_val
+            label_color = 'red'
+        else:
+            label_value = winner_score_val
+            label_color = default_winner_color
 
-                ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f"{int(x//60):02d}:{int(x%60):02d}"))
-                ax.set_title(f"Point Progression Timeline - {clean_set_title}", fontsize=12, fontweight='bold')
-                ax.set_xlabel("Time in Set (mm:ss)")
-                ax.set_ylabel("Points")
-                ax.legend(loc='lower right', fontsize=9)
-                ax.grid(axis='y', alpha=0.3)
+        ax.text(
+            x_pos,
+            label_value + 0.6,
+            str(label_value),
+            color=label_color,
+            fontsize=7,
+            fontweight='bold',
+            ha='center'
+        )
 
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                    plt.savefig(tmp.name, bbox_inches='tight', dpi=150)
-                    pdf.image(tmp.name, x=10, w=190)
-                    os.remove(tmp.name)
-                plt.close()
-                pdf.ln(10)
+    ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f"{int(x//60):02d}:{int(x%60):02d}"))
+    ax.set_title(f"Point Progression Timeline - {clean_set_title}", fontsize=12, fontweight='bold')
+    ax.set_xlabel("Time in Set (mm:ss)")
+    ax.set_ylabel("Points")
+    ax.legend(loc='lower right', fontsize=9)
+    ax.grid(axis='y', alpha=0.3)
 
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+        plt.savefig(tmp.name, bbox_inches='tight', dpi=150)
+        pdf.image(tmp.name, x=10, w=190)
+        os.remove(tmp.name)
+    plt.close()
+    pdf.ln(10)
+    
             # --- 6. TOP 10 TOUGHEST RALLIES ---
             pdf.add_page()
             pdf.section_title("Top 10 Toughest Rallies (by Work:Rest Ratio)")
