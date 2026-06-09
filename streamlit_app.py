@@ -644,6 +644,27 @@ if rdf is not None and not rdf.empty:
                 crit_table.append([side, "Unforced Error", count])
             pdf.quick_table(["Side", "Error Type", "Count in Critical Moments"], crit_table, [40, 60, 50])
 
+                        pdf.set_font("Arial", 'B', 11)
+            pdf.cell(0, 8, safe_pdf_text("Points Won from Opponent Unforced Errors"), ln=True)
+
+            unforced_contrib = compute_unforced_point_contribution(rdf)
+
+            contrib_table = []
+            for _, row in unforced_contrib.iterrows():
+                side_name = p_name if row['Side'] == 'Player' else o_name
+                contrib_table.append([
+                    side_name,
+                    int(row['Total_Points_Won']),
+                    int(row['Points_From_Opp_Unforced']),
+                    f"{row['Pct_From_Opp_Unforced']:.1f}%"
+                ])
+
+            pdf.quick_table(
+                ["Side", "Total Points Won", "Points from Opp. UFE", "% of Points Won"],
+                contrib_table,
+                [45, 40, 50, 35]
+            )
+
             pdf.set_font("Arial", 'B', 11)
             pdf.cell(0, 8, safe_pdf_text("Unforced Errors by Shot Type"), ln=True)
             shot_table = []
