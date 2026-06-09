@@ -280,6 +280,42 @@ def compute_error_stats(rdf):
         'max_streaks': max_streaks
     }
 
+def compute_unforced_point_contribution(rdf):
+    if rdf.empty:
+        return pd.DataFrame(columns=[
+            'Side',
+            'Total_Points_Won',
+            'Points_From_Opp_Unforced',
+            'Pct_From_Opp_Unforced'
+        ])
+
+    total_points = (
+        rdf.groupby('Winner')
+        .size()
+        .reindex(['Player', 'Opponent'], fill_value=0)
+        .reset_index(name='Total_Points_Won')
+        .rename(columns={'Winner': 'Side'})
+    )
+
+    unforced_points = (
+        rdf[rdf['Error_Type'] == 'Unforced Error']
+        .groupby('Winner')
+        .size()
+        .reindex(['Player', 'Opponent'], fill_value=0)
+        .reset_index(name='Points_From_Opp_Unforced')
+        .rename(columns={'Winner': 'Side'})
+    )
+
+    summary = total_points.merge(unforced_points, on='Side', how='left')
+    summary['Points_From_Opp_Unforced'] = summary['Points_From_Opp_Unforced'].fillna(0).astype(int)
+
+    summary['Pct_From_Opp_Unforced'] = np.where(
+        summary['Total_Points_Won'] > 0,
+        (summary['Points_From_Opp_Unforced'] / summary['Total_Points_Won']) * 100,
+        0
+    )
+
+    return summary
 
 # --- MAIN INTERFACE ---
 st.title("HPSI Badminton Analytics- PDF Report Generation")
