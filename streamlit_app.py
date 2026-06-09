@@ -517,14 +517,13 @@ if rdf is not None and not rdf.empty:
                         ax_serve.text(
                             p.get_x() + p.get_width() / 2.0,
                             height / 2,
-                            f"{height:.0f}%\n({count})",
+                            f"{height:.0f}% ({count})",
                             ha='center',
                             va='center',
                             color='white',
                             fontweight='bold',
                             fontsize=9
-                        )
-
+)
             ax_serve.set_title("Serve Outcome Breakdown", fontsize=14)
             ax_serve.set_xlabel("")
             ax_serve.set_ylabel("Percentage of Points Won")
@@ -561,11 +560,11 @@ if rdf is not None and not rdf.empty:
                 ax_dist.text(
                     bar.get_x() + bar.get_width() / 2.0,
                     height + 1,
-                    f"{height:.0f}%\n({count})",
+                    f"{height:.0f}% ({count})",
                     ha='center',
                     va='bottom',
                     fontweight='bold'
-                )
+)
 
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
                 plt.savefig(tmp.name, bbox_inches='tight', dpi=150)
@@ -599,13 +598,13 @@ if rdf is not None and not rdf.empty:
                         ax_wincat.text(
                             i,
                             cumulative_height + val / 2,
-                            f"{val:.0f}%\n({count})",
+                            f"{val:.0f}% ({count})",
                             ha='center',
                             va='center',
                             color='white',
                             fontweight='bold',
                             fontsize=8
-                        )
+)
                         cumulative_height += val
 
             ax_wincat.set_title("Win by Rally Category", fontweight='bold')
