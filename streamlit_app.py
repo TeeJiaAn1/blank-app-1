@@ -705,6 +705,12 @@ if rdf is not None and not rdf.empty:
                     f"{row['Pct_From_Opp_Unforced']:.1f}%"
                 ])
 
+            pdf.quick_table(
+                ["Player", "Total Points Won", "Own Points", "Points from Opp. UFE", "% Own Points", "% from Opp. UFE"],
+                contrib_table,
+                [32, 32, 25, 42, 26, 30]
+            )
+
             pdf.set_font("Arial", 'B', 11)
             pdf.cell(0, 8, safe_pdf_text("Unforced Errors by Shot Type"), ln=True)
 
