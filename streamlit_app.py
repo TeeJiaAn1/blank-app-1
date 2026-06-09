@@ -824,22 +824,6 @@ if rdf is not None and not rdf.empty:
                 [80, 70]
             )
 
-            fig_err, ax_err = plt.subplots(figsize=(4, 3))
-            unforced_by_side = err_counts[err_counts['Error_Type'] == 'Unforced Error']
-            if not unforced_by_side.empty:
-                colors = [col_player if side == "Player" else col_opponent for side in unforced_by_side['Error_Side']]
-                ax_err.bar(unforced_by_side['Error_Side'], unforced_by_side['Count'], color=colors)
-                ax_err.set_title("Total Unforced Errors by Side")
-                ax_err.set_ylabel("Count")
-                for i, v in enumerate(unforced_by_side['Count']):
-                    ax_err.text(i, v + 0.2, str(int(v)), ha='center', va='bottom')
-
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                    plt.savefig(tmp.name, bbox_inches='tight', dpi=150)
-                    pdf.image(tmp.name, x=40, w=120)
-                    os.remove(tmp.name)
-            plt.close()
-
             # --- 5. POINT PROGRESSION & LOAD PER SET ---
             pdf.add_page()
             pdf.section_title("Point Progression & Load per Set")
