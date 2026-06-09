@@ -590,7 +590,7 @@ if rdf is not None and not rdf.empty:
             max_streaks = error_stats['max_streaks']
 
             pdf.set_font("Arial", 'B', 11)
-            pdf.cell(0, 8, safe_pdf_text("Total Forced vs Unforced Errors (by side committing error)"), ln=True)
+            pdf.cell(0, 8, safe_pdf_text("Error type, Player, Opponent"), ln=True)
             table_data = []
             for side in ['Player', 'Opponent']:
                 for etype in ['Unforced Error', 'Forced Error']:
