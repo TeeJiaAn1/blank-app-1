@@ -807,12 +807,22 @@ if rdf is not None and not rdf.empty:
 
             pdf.set_font("Arial", 'B', 11)
             pdf.cell(0, 8, safe_pdf_text("Longest Streaks of Consecutive Unforced Errors"), ln=True)
+
             streak_table = []
-            if max_streaks is not None:
+            if max_streaks is not None and not max_streaks.empty:
                 for _, row in max_streaks.iterrows():
-                    streak_table.append([row['Side'], int(row['Streak_Length'])])
+                    side_name = p_name if row['Side'] == 'Player' else o_name
+                    streak_table.append([
+                        side_name,
+                        int(row['Streak_Length'])
+                    ])
+
             if streak_table:
-                pdf.quick_table(["Side", "Max Consecutive Unforced Errors"], streak_table, [70, 60])
+                pdf.quick_table(
+                    ["Player", "Max. Consecutive Unforced Errors"],
+                    streak_table,
+                    [80, 70]
+                )
 
             fig_err, ax_err = plt.subplots(figsize=(4, 3))
             unforced_by_side = err_counts[err_counts['Error_Type'] == 'Unforced Error']
