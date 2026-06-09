@@ -705,26 +705,61 @@ if rdf is not None and not rdf.empty:
                     f"{row['Pct_From_Opp_Unforced']:.1f}%"
                 ])
 
-            pdf.quick_table(
-                ["Player", "Total Points Won", "Own Points", "Points from Opp. UFE", "% Own Points", "% from Opp. UFE"],
-                contrib_table,
-                [32, 32, 25, 42, 26, 30]
-            )
-            
             pdf.set_font("Arial", 'B', 11)
             pdf.cell(0, 8, safe_pdf_text("Unforced Errors by Shot Type"), ln=True)
-            shot_table = []
-            sub_shot = shot_type_counts[shot_type_counts['Error_Type'] == 'Unforced Error']
-            for side in ['Player', 'Opponent']:
-                side_sub = sub_shot[sub_shot['Error_Side'] == side]
-                for _, row in side_sub.iterrows():
+
+            sub_shot = shot_type_counts[shot_type_counts['Error_Type'] == 'Unforced Error'].copy()
+
+            if not sub_shot.empty:
+                sub_shot['Shot_Type'] = sub_shot['Shot_Type'].fillna("Unknown")
+
+                shot_pivot = (
+                    sub_shot
+                    .pivot_table(
+                        index='Shot_Type',
+                        columns='Error_Side',
+                        values='Count',
+                        aggfunc='sum',
+                        fill_value=0
+                    )
+                    .reindex(columns=['Player', 'Opponent'], fill_value=0)
+                    .reset_index()
+                )
+
+                preferred_order = [
+                    'Full Smash', 'Serve Won', 'Serve Loss', 'Half Smash',
+                    'Drop', 'Net', 'NetKill', 'Drive', 'Block',
+                    'Clear', 'Lift', 'Let', 'Unknown'
+                ]
+
+                present_types = shot_pivot['Shot_Type'].tolist()
+                ordered_types = [x for x in preferred_order if x in present_types]
+                remaining_types = [x for x in present_types if x not in ordered_types]
+                final_order = ordered_types + sorted(remaining_types)
+
+                shot_pivot['Shot_Type'] = pd.Categorical(
+                    shot_pivot['Shot_Type'],
+                    categories=final_order,
+                    ordered=True
+                )
+                shot_pivot = shot_pivot.sort_values('Shot_Type')
+
+                shot_table = []
+                for _, row in shot_pivot.iterrows():
+                    player_val = int(row['Player']) if row['Player'] > 0 else "-"
+                    opponent_val = int(row['Opponent']) if row['Opponent'] > 0 else "-"
+
                     shot_table.append([
-                        side,
-                        row['Shot_Type'] if pd.notna(row['Shot_Type']) else "Unknown",
-                        int(row['Count'])
+                        row['Shot_Type'],
+                        player_val,
+                        opponent_val
                     ])
-            if shot_table:
-                pdf.quick_table(["Side", "Shot Type", "Count"], shot_table, [40, 60, 40])
+
+                pdf.quick_table(
+                    ["Shot Type", p_name, o_name],
+                    shot_table,
+                    [55, 42, 42]
+                )
 
             pdf.set_font("Arial", 'B', 11)
             pdf.cell(0, 8, safe_pdf_text("Unforced Errors by Player Court Zone"), ln=True)
