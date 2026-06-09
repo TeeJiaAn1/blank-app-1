@@ -636,14 +636,33 @@ if rdf is not None and not rdf.empty:
             max_streaks = error_stats['max_streaks']
 
             pdf.set_font("Arial", 'B', 11)
-            pdf.cell(0, 8, safe_pdf_text("Error type, Player, Opponent"), ln=True)
-            table_data = []
-            for side in ['Player', 'Opponent']:
-                for etype in ['Unforced Error', 'Forced Error']:
-                    sub = err_counts[(err_counts['Error_Side'] == side) & (err_counts['Error_Type'] == etype)]
-                    count = int(sub['Count'].iloc[0]) if not sub.empty else 0
-                    table_data.append([side, etype, count])
-            pdf.quick_table(["Side", "Error Type", "Count"], table_data, [40, 50, 30])
+            pdf.cell(0, 8, safe_pdf_text("Error Type by Side Committing Error"), ln=True)
+
+            def get_error_count(side, etype):
+                sub = err_counts[
+                    (err_counts['Error_Side'] == side) &
+                    (err_counts['Error_Type'] == etype)
+                ]
+                return int(sub['Count'].iloc[0]) if not sub.empty else 0
+
+            table_data = [
+                [
+                    "Unforced Error",
+                    get_error_count("Player", "Unforced Error"),
+                    get_error_count("Opponent", "Unforced Error")
+                ],
+                [
+                    "Forced Error",
+                    get_error_count("Player", "Forced Error"),
+                    get_error_count("Opponent", "Forced Error")
+                ]
+            ]
+
+            pdf.quick_table(
+                ["Metric", p_name, o_name],
+                table_data,
+                [55, 42, 42]
+            )
 
             pdf.set_font("Arial", 'B', 11)
             pdf.cell(0, 8, safe_pdf_text("Unforced Errors in Critical Moments (score diff <=1 or >=18 points)"), ln=True)
