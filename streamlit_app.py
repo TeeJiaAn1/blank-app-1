@@ -664,7 +664,7 @@ if rdf is not None and not rdf.empty:
             max_streaks = error_stats['max_streaks']
 
             pdf.set_font("Arial", 'B', 11)
-            pdf.cell(0, 8, safe_pdf_text("Error Type by Side Committing Error"), ln=True)
+            pdf.cell(0, 8, safe_pdf_text("Error Type, Player, Opponent"), ln=True)
 
             def get_error_count(side, etype):
                 sub = err_counts[
