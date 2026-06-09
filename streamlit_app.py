@@ -769,18 +769,41 @@ if rdf is not None and not rdf.empty:
 
             pdf.set_font("Arial", 'B', 11)
             pdf.cell(0, 8, safe_pdf_text("Unforced Errors by Player Court Zone"), ln=True)
-            zone_table = []
-            sub_zone = zone_counts[zone_counts['Error_Type'] == 'Unforced Error']
-            for side in ['Player', 'Opponent']:
-                side_sub = sub_zone[sub_zone['Error_Side'] == side]
-                for _, row in side_sub.iterrows():
+
+            sub_zone = zone_counts[zone_counts['Error_Type'] == 'Unforced Error'].copy()
+
+            if not sub_zone.empty:
+                sub_zone['Player_Zone'] = sub_zone['Player_Zone'].fillna("Unknown")
+
+                zone_pivot = (
+                    sub_zone
+                    .pivot_table(
+                        index='Player_Zone',
+                        columns='Error_Side',
+                        values='Count',
+                        aggfunc='sum',
+                        fill_value=0
+                    )
+                    .reindex(columns=['Player', 'Opponent'], fill_value=0)
+                    .reset_index()
+                )
+
+                zone_table = []
+                for _, row in zone_pivot.iterrows():
+                    player_val = int(row['Player']) if row['Player'] > 0 else "-"
+                    opponent_val = int(row['Opponent']) if row['Opponent'] > 0 else "-"
+
                     zone_table.append([
-                        side,
-                        row['Player_Zone'] if pd.notna(row['Player_Zone']) else "Unknown",
-                        int(row['Count'])
+                        row['Player_Zone'],
+                        player_val,
+                        opponent_val
                     ])
-            if zone_table:
-                pdf.quick_table(["Side", "Player Zone", "Count"], zone_table, [40, 60, 40])
+
+                pdf.quick_table(
+                    ["Player Zone", p_name, o_name],
+                    zone_table,
+                    [55, 42, 42]
+                )
 
             pdf.set_font("Arial", 'B', 11)
             pdf.cell(0, 8, safe_pdf_text("Longest Streaks of Consecutive Unforced Errors"), ln=True)
