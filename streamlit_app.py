@@ -81,10 +81,11 @@ class BadmintonReport(FPDF):
         self.ln(5)
 
     def quick_table(self, header, data, col_widths):
-        base_font_size = 10
-        min_font_size = 6
+        base_header_font = 10
+        base_body_font = 10
+        min_font_size = 5
         header_height = 8
-        body_height = 7
+        row_height = 7
         padding = 2
 
         # Header row
@@ -95,7 +96,7 @@ class BadmintonReport(FPDF):
             text = safe_pdf_text(h)
             col_width = col_widths[i]
 
-            font_size = base_font_size
+            font_size = base_header_font
             self.set_font("Arial", 'B', font_size)
 
             while self.get_string_width(text) > (col_width - padding) and font_size > min_font_size:
@@ -107,12 +108,23 @@ class BadmintonReport(FPDF):
         self.ln()
 
         # Body rows
-        self.set_font("Arial", size=10)
         self.set_text_color(0, 0, 0)
 
         for row in data:
             for i, item in enumerate(row):
-                self.cell(col_widths[i], body_height, safe_pdf_text(item), border=1, align='C')
+                text = safe_pdf_text(item)
+                col_width = col_widths[i]
+
+                font_size = base_body_font
+                self.set_font("Arial", '', font_size)
+
+                while self.get_string_width(text) > (col_width - padding) and font_size > min_font_size:
+                    font_size -= 0.5
+                    self.set_font("Arial", '', font_size)
+
+                align = 'L' if i == 0 else 'C'
+                self.cell(col_width, row_height, text, border=1, align=align)
+
             self.ln()
 
         self.ln(5)
@@ -701,7 +713,7 @@ if rdf is not None and not rdf.empty:
             pdf.quick_table(
                 ["Player", "Total Points Won", "Own Points", "Points from Opp. UFE", "% Own Points", "% from Opp. UFE"],
                 contrib_table,
-                [40, 28, 25, 40, 26, 31]
+                [58, 27, 25, 38, 21, 21]
             )
 
             pdf.set_font("Arial", 'B', 11)
