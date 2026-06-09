@@ -644,7 +644,7 @@ if rdf is not None and not rdf.empty:
                 crit_table.append([side, "Unforced Error", count])
             pdf.quick_table(["Side", "Error Type", "Count in Critical Moments"], crit_table, [40, 60, 50])
 
-                        pdf.set_font("Arial", 'B', 11)
+            pdf.set_font("Arial", 'B', 11)
             pdf.cell(0, 8, safe_pdf_text("Points Won from Opponent Unforced Errors"), ln=True)
 
             unforced_contrib = compute_unforced_point_contribution(rdf)
