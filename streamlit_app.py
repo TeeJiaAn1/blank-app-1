@@ -88,13 +88,13 @@ class BadmintonReport(FPDF):
             self.set_text_color(0, 0, 0)
 
             for i, h in enumerate(header):
-                self.cell(col_widths[i], 7, str(h), border=1, fill=True, align='C')
+                self.cell(col_widths[i], 7, safe_pdf_text(h), border=1, fill=True, align='C')
             self.ln()
 
             self.set_font("Arial", size=font_size)
             for row in data:
                 for i, item in enumerate(row):
-                    self.cell(col_widths[i], 7, str(item), border=1, align='C')
+                    self.cell(col_widths[i], 7, safe_pdf_text(item), border=1, align='C')
                 self.ln()
             self.ln(5)
         
