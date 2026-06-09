@@ -81,22 +81,24 @@ class BadmintonReport(FPDF):
     def quick_table(self, header, data, col_widths):
         font_size = 10
 
+    # Header style
         self.set_font("Arial", 'B', font_size)
-        self.set_fill_color(230, 230, 230)
-        self.set_text_color(0, 0, 0)
+        self.set_fill_color(44, 62, 80)   # same dark navy style
+        self.set_text_color(255, 255, 255)
 
-        for i, h in enumerate(header):
-            self.cell(col_widths[i], 7, safe_pdf_text(h), border=1, fill=True, align='C')
+    for i, h in enumerate(header):
+        self.cell(col_widths[i], 8, safe_pdf_text(h), border=1, fill=True, align='C')
+    self.ln()
+
+    # Body style
+    self.set_font("Arial", size=font_size)
+    self.set_text_color(0, 0, 0)
+
+    for row in data:
+        for i, item in enumerate(row):
+            self.cell(col_widths[i], 7, safe_pdf_text(item), border=1, align='C')
         self.ln()
-
-        self.set_font("Arial", size=font_size)
-        self.set_text_color(0, 0, 0)
-
-        for row in data:
-            for i, item in enumerate(row):
-                self.cell(col_widths[i], 7, safe_pdf_text(item), border=1, align='C')
-            self.ln()
-        self.ln(5)
+    self.ln(5)
 
 # --- ANALYTICS ENGINE ---
 def analyze_match(df, p_name, o_name):
