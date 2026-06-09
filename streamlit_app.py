@@ -666,13 +666,27 @@ if rdf is not None and not rdf.empty:
 
             pdf.set_font("Arial", 'B', 11)
             pdf.cell(0, 8, safe_pdf_text("Unforced Errors in Critical Moments (score diff <=1 or >=18 points)"), ln=True)
-            crit_table = []
-            for side in ['Player', 'Opponent']:
-                sub = crit_counts[(crit_counts['Error_Side'] == side) & (crit_counts['Error_Type'] == 'Unforced Error')]
-                count = int(sub['Count'].iloc[0]) if not sub.empty else 0
-                crit_table.append([side, "Unforced Error", count])
-            pdf.quick_table(["Side", "Error Type", "Count in Critical Moments"], crit_table, [40, 60, 50])
 
+            def get_critical_unforced_count(side):
+                sub = crit_counts[
+                    (crit_counts['Error_Side'] == side) &
+                    (crit_counts['Error_Type'] == 'Unforced Error')
+                ]
+                return int(sub['Count'].iloc[0]) if not sub.empty else 0
+
+            crit_table = [
+                [
+                    "Unforced Error in Critical Moment",
+                    get_critical_unforced_count("Player"),
+                    get_critical_unforced_count("Opponent")
+                ]
+            ]
+
+            pdf.quick_table(
+                ["Metric", p_name, o_name],
+                crit_table,
+                [55, 42, 42]
+            )
             pdf.set_font("Arial", 'B', 11)
             pdf.cell(0, 8, safe_pdf_text("Points Won from Opponent Unforced Errors"), ln=True)
 
