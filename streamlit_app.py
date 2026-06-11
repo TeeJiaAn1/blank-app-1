@@ -88,7 +88,6 @@ class BadmintonReport(FPDF):
         row_height = 7
         padding = 2
 
-        # Header row
         self.set_fill_color(44, 62, 80)
         self.set_text_color(255, 255, 255)
 
@@ -107,7 +106,6 @@ class BadmintonReport(FPDF):
 
         self.ln()
 
-        # Body rows
         self.set_text_color(0, 0, 0)
 
         for row in data:
@@ -349,6 +347,30 @@ def compute_unforced_point_contribution(rdf):
     return summary
 
 
+# --- SGP FOCUS HELPERS FOR POINT PROGRESSION TIMELINE ONLY ---
+def contains_sgp(name):
+    return "(SGP)" in str(name)
+
+
+def get_default_timeline_focus_side(p_name, o_name):
+    p_is_sgp = contains_sgp(p_name)
+    o_is_sgp = contains_sgp(o_name)
+
+    if p_is_sgp:
+        return "Player"
+    if o_is_sgp:
+        return "Opponent"
+    return None
+
+
+def get_focus_display_name(side, p_name, o_name):
+    if side == "Player":
+        return p_name
+    if side == "Opponent":
+        return o_name
+    return "None"
+
+
 # --- MAIN INTERFACE ---
 st.title("HPSI Badminton Analytics- PDF Report Generation")
 
@@ -360,6 +382,29 @@ with st.sidebar:
     round_m = st.text_input("Round", "R16")
     p_name = st.text_input("Player Name", "YEO Jia Min")
     o_name = st.text_input("Opponent Name", "HAN Qian Xi")
+
+    p_is_sgp = contains_sgp(p_name)
+    o_is_sgp = contains_sgp(o_name)
+
+    timeline_focus_side = get_default_timeline_focus_side(p_name, o_name)
+
+    if p_is_sgp and o_is_sgp:
+        st.markdown("---")
+        st.subheader("Timeline Focus")
+        focus_label = st.selectbox(
+            "Choose which SGP player controls error markers in point progression timeline",
+            options=[p_name, o_name],
+            index=0
+        )
+        timeline_focus_side = "Player" if focus_label == p_name else "Opponent"
+        st.caption("This affects only the point progression timeline.")
+    elif p_is_sgp or o_is_sgp:
+        st.markdown("---")
+        st.subheader("Timeline Focus")
+        st.caption(
+            f"Auto-selected for point progression timeline: "
+            f"{get_focus_display_name(timeline_focus_side, p_name, o_name)}"
+        )
 
 uploaded_file = st.file_uploader("Upload DartFish CSV", type="csv")
 
@@ -716,79 +761,6 @@ if rdf is not None and not rdf.empty:
                 [58, 27, 27, 27, 27, 27]
             )
 
-            #pdf.set_font("Arial", 'B', 11)
-            #pdf.cell(0, 8, safe_pdf_text("Unforced Errors by Shot Type"), ln=True)
-
-            #sub_shot = shot_type_counts[shot_type_counts['Error_Type'] == 'Unforced Error'].copy()
-            #if not sub_shot.empty:
-                #sub_shot['Shot_Type'] = sub_shot['Shot_Type'].fillna("Unknown")
-                #shot_pivot = (
-                    #sub_shot
-                    #.pivot_table(
-                        #index='Shot_Type',
-                        #columns='Error_Side',
-                        #values='Count',
-                        #aggfunc='sum',
-                        #fill_value=0
-                    #)
-                    #.reindex(columns=['Player', 'Opponent'], fill_value=0)
-                    #.reset_index()
-                #)
-
-                #preferred_order = [
-                    #'Full Smash', 'Serve Won', 'Serve Loss', 'Half Smash',
-                    #'Drop', 'Net', 'NetKill', 'Drive', 'Block',
-                    #'Clear', 'Lift', 'Let', 'Unknown'
-                #]
-
-                #present_types = shot_pivot['Shot_Type'].tolist()
-                #ordered_types = [x for x in preferred_order if x in present_types]
-                #remaining_types = [x for x in present_types if x not in ordered_types]
-                #final_order = ordered_types + sorted(remaining_types)
-
-                #shot_pivot['Shot_Type'] = pd.Categorical(
-                    #shot_pivot['Shot_Type'],
-                    #categories=final_order,
-                    #ordered=True
-                #)
-                #shot_pivot = shot_pivot.sort_values('Shot_Type')
-
-                #shot_table = []
-                #for _, row in shot_pivot.iterrows():
-                    #player_val = int(row['Player']) if row['Player'] > 0 else "-"
-                    #opponent_val = int(row['Opponent']) if row['Opponent'] > 0 else "-"
-                    #shot_table.append([row['Shot_Type'], player_val, opponent_val])
-
-                #pdf.quick_table(["Shot Type", p_name, o_name], shot_table, [50, 55, 55])
-
-            #pdf.set_font("Arial", 'B', 11)
-            #pdf.cell(0, 8, safe_pdf_text("Unforced Errors by Player Court Zone"), ln=True)
-
-            #sub_zone = zone_counts[zone_counts['Error_Type'] == 'Unforced Error'].copy()
-            #if not sub_zone.empty:
-                #sub_zone['Player_Zone'] = sub_zone['Player_Zone'].fillna("Unknown")
-
-                #zone_pivot = (
-                    #sub_zone
-                    #.pivot_table(
-                        #index='Player_Zone',
-                        #columns='Error_Side',
-                        #values='Count',
-                        #aggfunc='sum',
-                        #fill_value=0
-                    #)
-                    #.reindex(columns=['Player', 'Opponent'], fill_value=0)
-                    #.reset_index()
-                #)
-
-                #zone_table = []
-                #for _, row in zone_pivot.iterrows():
-                    #player_val = int(row['Player']) if row['Player'] > 0 else "-"
-                    #opponent_val = int(row['Opponent']) if row['Opponent'] > 0 else "-"
-                    #zone_table.append([row['Player_Zone'], player_val, opponent_val])
-
-                #pdf.quick_table(["Player Zone", p_name, o_name], zone_table, [50, 55, 55])
-
             pdf.set_font("Arial", 'B', 11)
             pdf.cell(0, 8, safe_pdf_text("Longest Streaks of Consecutive Unforced Errors"), ln=True)
 
@@ -855,12 +827,26 @@ if rdf is not None and not rdf.empty:
                         winner_score_val = int(row['P_Score_Before'] + 1)
                         loser_score_val = int(row['O_Score_Before'])
                         winner_color_default = col_player
+                        loser_side = "Opponent"
                     else:
                         winner_score_val = int(row['O_Score_Before'] + 1)
                         loser_score_val = int(row['P_Score_Before'])
                         winner_color_default = col_opponent
+                        loser_side = "Player"
 
-                    winner_label_color = col_forced if error_type == 'Forced Error' else winner_color_default
+                    show_forced_marker = (
+                        error_type == 'Forced Error' and
+                        timeline_focus_side is not None and
+                        winner == timeline_focus_side
+                    )
+
+                    show_unforced_marker = (
+                        error_type == 'Unforced Error' and
+                        timeline_focus_side is not None and
+                        loser_side == timeline_focus_side
+                    )
+
+                    winner_label_color = col_forced if show_forced_marker else winner_color_default
 
                     ax.text(
                         x_pos,
@@ -872,7 +858,7 @@ if rdf is not None and not rdf.empty:
                         ha='center'
                     )
 
-                    if error_type == 'Unforced Error':
+                    if show_unforced_marker:
                         ax.text(
                             x_pos,
                             loser_score_val + 0.2,
