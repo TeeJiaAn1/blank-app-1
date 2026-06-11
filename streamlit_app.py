@@ -426,11 +426,13 @@ def get_streak_spans(err_df):
     grouped = err_df.groupby('streak_group')
 
     for _, grp in grouped:
-        if len(grp) >= 2:
+        streak_len = len(grp)
+        if streak_len >= 2:
             spans.append({
                 'error_kind': grp['error_kind'].iloc[0],
                 'x_start': grp['x_pos'].min(),
-                'x_end': grp['x_pos'].max()
+                'x_end': grp['x_pos'].max(),
+                'streak_len': streak_len
             })
 
     return spans
@@ -961,13 +963,32 @@ if rdf is not None and not rdf.empty:
                 for span in streak_spans:
                     pad = 0.8
                     bg_color = '#A9DFBF' if span['error_kind'] == 'Forced Error' else '#F5B7B1'
+                    text_color = col_forced if span['error_kind'] == 'Forced Error' else 'red'
+                    y_text = 0.72 if span['error_kind'] == 'Forced Error' else 0.28
+
+                    x_left = max(0, span['x_start'] - pad)
+                    x_right = span['x_end'] + pad
+                    x_mid = (x_left + x_right) / 2
+
                     ax_err.axvspan(
-                        max(0, span['x_start'] - pad),
-                        span['x_end'] + pad,
+                        x_left,
+                        x_right,
                         ymin=0.08,
                         ymax=0.92,
                         color=bg_color,
                         alpha=0.35
+                    )
+
+                    ax_err.text(
+                        x_mid,
+                        y_text,
+                        str(span['streak_len']),
+                        color=text_color,
+                        fontsize=9,
+                        fontweight='bold',
+                        ha='center',
+                        va='center',
+                        bbox=dict(facecolor='white', edgecolor='none', alpha=0.75, boxstyle='round,pad=0.18')
                     )
 
                 ax_err.hlines(y=0.72, xmin=0, xmax=max_x, color='#d9d9d9', linewidth=1)
