@@ -371,6 +371,71 @@ def get_focus_display_name(side, p_name, o_name):
     return "None"
 
 
+def build_focus_error_events(s_df, focus_side):
+    if s_df.empty or focus_side is None:
+        return pd.DataFrame(columns=['x_pos', 'error_kind', 'streak_group'])
+
+    rows = []
+
+    for _, row in s_df.iterrows():
+        winner = row['Winner']
+        error_type = row.get('Error_Type', None)
+        x_pos = row['End_Rel']
+
+        if winner == 'Player':
+            loser_side = "Opponent"
+        else:
+            loser_side = "Player"
+
+        if error_type == 'Forced Error' and winner == focus_side:
+            rows.append({
+                'x_pos': x_pos,
+                'error_kind': 'Forced Error'
+            })
+        elif error_type == 'Unforced Error' and loser_side == focus_side:
+            rows.append({
+                'x_pos': x_pos,
+                'error_kind': 'Unforced Error'
+            })
+
+    err_df = pd.DataFrame(rows)
+
+    if err_df.empty:
+        err_df['streak_group'] = []
+        return err_df
+
+    streak_groups = []
+    current_group = 0
+    prev_kind = None
+
+    for _, row in err_df.iterrows():
+        if row['error_kind'] != prev_kind:
+            current_group += 1
+        streak_groups.append(current_group)
+        prev_kind = row['error_kind']
+
+    err_df['streak_group'] = streak_groups
+    return err_df
+
+
+def get_streak_spans(err_df):
+    if err_df.empty:
+        return []
+
+    spans = []
+    grouped = err_df.groupby('streak_group')
+
+    for _, grp in grouped:
+        if len(grp) >= 2:
+            spans.append({
+                'error_kind': grp['error_kind'].iloc[0],
+                'x_start': grp['x_pos'].min(),
+                'x_end': grp['x_pos'].max()
+            })
+
+    return spans
+
+
 # --- MAIN INTERFACE ---
 st.title("HPSI Badminton Analytics- PDF Report Generation")
 
@@ -392,17 +457,17 @@ with st.sidebar:
         st.markdown("---")
         st.subheader("Timeline Focus")
         focus_label = st.selectbox(
-            "Choose which SGP player to display unforced error markers in point progression timeline",
+            "Choose which SGP player controls error markers in point progression timeline",
             options=[p_name, o_name],
             index=0
         )
         timeline_focus_side = "Player" if focus_label == p_name else "Opponent"
-        st.caption("This affects only the point progression timeline.")
+        st.caption("This affects only the point progression timeline and error strip.")
     elif p_is_sgp or o_is_sgp:
         st.markdown("---")
         st.subheader("Timeline Focus")
         st.caption(
-            f"Auto-selected for point progression timeline: "
+            f"Auto-selected for point progression timeline and error strip: "
             f"{get_focus_display_name(timeline_focus_side, p_name, o_name)}"
         )
 
@@ -777,7 +842,7 @@ if rdf is not None and not rdf.empty:
 
             # --- 5. POINT PROGRESSION & LOAD PER SET ---
             pdf.add_page()
-            pdf.section_title("Point Progression & Load per Set")
+            pdf.section_title("Point Progression & Error Sequence per Set")
 
             set_list = list(rdf['Set'].unique())
 
@@ -806,7 +871,12 @@ if rdf is not None and not rdf.empty:
                 s_df['P_Cum'] = (s_df['Winner'] == 'Player').cumsum()
                 s_df['O_Cum'] = (s_df['Winner'] == 'Opponent').cumsum()
 
-                fig, ax = plt.subplots(figsize=(10, 5))
+                fig, (ax, ax_err) = plt.subplots(
+                    2, 1,
+                    figsize=(10, 6.6),
+                    sharex=True,
+                    gridspec_kw={'height_ratios': [5, 1.2], 'hspace': 0.12}
+                )
 
                 for _, rally in s_df.iterrows():
                     ax.axvspan(rally['Start_Rel'], rally['End_Rel'], color=col_work, alpha=0.5)
@@ -871,15 +941,84 @@ if rdf is not None and not rdf.empty:
 
                 ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f"{int(x//60):02d}:{int(x%60):02d}"))
                 ax.set_title(f"Point Progression Timeline - {clean_set_title}", fontsize=12, fontweight='bold')
-                ax.set_xlabel("Time in Set (mm:ss)")
+                ax.set_xlabel("")
                 ax.set_ylabel("Points")
                 ax.legend(loc='lower right', fontsize=9)
                 ax.grid(axis='y', alpha=0.3)
+
+                err_df = build_focus_error_events(s_df, timeline_focus_side)
+                streak_spans = get_streak_spans(err_df)
+
+                ax_err.set_ylim(0, 1)
+                ax_err.set_yticks([])
+                ax_err.grid(False)
+                ax_err.spines['left'].set_visible(False)
+                ax_err.spines['right'].set_visible(False)
+                ax_err.spines['top'].set_visible(False)
+
+                max_x = max(x_steps) if len(x_steps) > 0 else 0
+
+                for span in streak_spans:
+                    pad = 0.8
+                    bg_color = '#A9DFBF' if span['error_kind'] == 'Forced Error' else '#F5B7B1'
+                    ax_err.axvspan(
+                        max(0, span['x_start'] - pad),
+                        span['x_end'] + pad,
+                        ymin=0.08,
+                        ymax=0.92,
+                        color=bg_color,
+                        alpha=0.35
+                    )
+
+                ax_err.hlines(y=0.72, xmin=0, xmax=max_x, color='#d9d9d9', linewidth=1)
+                ax_err.hlines(y=0.28, xmin=0, xmax=max_x, color='#d9d9d9', linewidth=1)
+
+                label_x = -0.01 * max_x if max_x > 0 else -1
+
+                ax_err.text(
+                    label_x,
+                    0.72,
+                    "Forced",
+                    color=col_forced,
+                    fontsize=8,
+                    fontweight='bold',
+                    ha='right',
+                    va='center'
+                )
+                ax_err.text(
+                    label_x,
+                    0.28,
+                    "Unforced",
+                    color='red',
+                    fontsize=8,
+                    fontweight='bold',
+                    ha='right',
+                    va='center'
+                )
+
+                if not err_df.empty:
+                    forced_x = err_df.loc[err_df['error_kind'] == 'Forced Error', 'x_pos'].tolist()
+                    unforced_x = err_df.loc[err_df['error_kind'] == 'Unforced Error', 'x_pos'].tolist()
+
+                    if forced_x:
+                        ax_err.vlines(forced_x, ymin=0.55, ymax=0.89, color=col_forced, linewidth=2)
+
+                    if unforced_x:
+                        ax_err.vlines(unforced_x, ymin=0.11, ymax=0.45, color='red', linewidth=2)
+
+                ax_err.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f"{int(x//60):02d}:{int(x%60):02d}"))
+                ax_err.set_xlabel("Time in Set (mm:ss)")
+                ax_err.set_title(
+                    f"Error Sequence Strip - {get_focus_display_name(timeline_focus_side, p_name, o_name)}",
+                    fontsize=10,
+                    pad=4
+                )
 
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
                     plt.savefig(tmp.name, bbox_inches='tight', dpi=150)
                     pdf.image(tmp.name, x=10, w=190)
                     os.remove(tmp.name)
+
                 plt.close()
                 pdf.ln(10)
 
