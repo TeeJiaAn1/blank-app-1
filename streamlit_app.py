@@ -489,8 +489,8 @@ if uploaded_file:
             st.warning("CSV uploaded, but no valid rallies were reconstructed. Check tag names and columns.")
     except Exception as e:
         st.error(f"Failed to read/process CSV: {e}")
-        else:
-            st.info("Please upload your DartFish CSV.")
+    else:
+        st.info("Please upload your DartFish CSV.")
 
 if rdf is not None and not rdf.empty:
     if st.button("Generate Full PDF Report"):
